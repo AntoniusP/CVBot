@@ -24,52 +24,59 @@
 ZumoMotors motors;
 Pixy2 pixy;
 
-
+// signature 1: red object
 // signature 5: blue object
 void cccFunction() 
 {
-  pixy.ccc.getBlocks();
-  
-  if(pixy.ccc.numBlocks > 0 )
-  {
-    Serial.print("Blocks Detected: ");
-    for(int i=0; i < pixy.ccc.numBlocks; i++)
+    pixy.ccc.getBlocks();
+    
+    if(pixy.ccc.numBlocks > 0 )
     {
-      Serial.print("block ");
-      Serial.print(i);
-      Serial.print(": ");
-      pixy.ccc.blocks[i].print();
+        Serial.print("Blocks Detected: ");
+        for(int i=0; i < pixy.ccc.numBlocks; i++)
+        {
+            Serial.print("block ");
+            Serial.print(i);
+            Serial.print(": ");
+            pixy.ccc.blocks[i].print();
+        }
+  
+         move_left_motor_speed(100, 2);
+         move_right_motor_speed(100,2);
+         digitalWrite(LED_PIN,HIGH);
     }
-  }
+    else
+    {
+         move_left_motor_speed(0, 2);
+         move_right_motor_speed(0,2); 
+    }
 }
 
 void move_left_motor_speed(int speed ,int time){
-  //Speed goes from 400 to -400
-  motors.setLeftSpeed(speed);
-  delay(time); 
+    //Speed goes from 400 to -400
+    motors.setLeftSpeed(speed);
+    delay(time); 
 }
+
 void move_right_motor_speed(int speed,int time){
-  //speed goes from 400 to -400
-  motors.setRightSpeed(speed);
-  delay(time);  
+    //speed goes from 400 to -400
+    motors.setRightSpeed(speed);
+    delay(time);  
 }
+
 void setup() 
 {
-  Serial.begin(115200);
-  Serial.println("CVBot Start..\n");
-
-  pixy.init();
+    Serial.begin(115200);
+    Serial.println("CVBot Start..\n");
   
-  pinMode(LED_PIN,HIGH);
-  //motors.flipLeftMotor(true);
-  //motors.flipRightMotor(true);
+    pixy.init();
+    
+    pinMode(LED_PIN,HIGH);
+    //motors.flipLeftMotor(true);
+    //motors.flipRightMotor(true);
 }
 
 void loop() 
 {
-   cccFunction();
-  
-   move_left_motor_speed(200,3000);
-   move_right_motor_speed(200,3000);
-   digitalWrite(LED_PIN,HIGH);
+    cccFunction();
 }
