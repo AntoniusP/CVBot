@@ -19,14 +19,14 @@
 #include <SPI.h>
 
 #define LED_PIN 13
-#define MAX_VELOCITY 250
+#define MAX_TRANSLATE_VELOCITY 200
 
 // global variables to interface motors and camera
 ZumoMotors motors;
 Pixy2 pixy;
 
 // parameters: proportional, integral, derivative, isServo
-PIDLoop pan(400, 0, 400, true);
+PIDLoop pan(500, 200, 500, true);
 PIDLoop tilt(500, 0, 500, true);
 PIDLoop turn(300, 500, 300, false);
 PIDLoop translate(400, 750, 300, true);
@@ -43,24 +43,35 @@ void move_right_motor_speed(int speed,int time){
     delay(time);  
 }
 
+// get largest block on camera frame that has existed for at least 25ms and return it to follow.
 
-
-// follow camera with pan/tilt motors
-void track()
-{
-    
+int acquireBlock(){
+    if (pixy.ccc.numBlocks)
+    {
+        if(pixy.ccc.blocks[0].m_age>25)
+        {
+            return pixy.ccc.blocks[0].m_index;       
+        }  
+    }
+    return -1;
 }
 
-
-// chase object with zumo shield motors
-void chase()
+Block* trackBlock(int index)
 {
-    
+    int i;
+    for (i=0; i<pixy.ccc.numBlocks; i++)
+    {
+        if (index==pixy.ccc.blocks[i].m_index)
+        {
+            return &pixy.ccc.blocks[i];
+        }
+    }
+    return NULL;
 }
 
 
 // use pan/tilt servos to scan for blocks
-int scan_inc = (PIXY_RCS_MAX_POS - PIXY_RCS_MIN_POS) / 150;
+int scan_inc = (PIXY_RCS_MAX_POS - PIXY_RCS_MIN_POS) / 120;
 int last_move = 0;
 void findObjects()
 {
@@ -68,19 +79,20 @@ void findObjects()
     {
         last_move = millis();
         pan.m_command += scan_inc;
+        
         if((pan.m_command >= PIXY_RCS_MAX_POS) || (pan.m_command <= PIXY_RCS_MIN_POS))
         {
-            tilt.m_command = random(PIXY_RCS_MAX_POS * 0.5, PIXY_RCS_MAX_POS);
+            tilt.m_command = random(PIXY_RCS_MIN_POS * 0.7, PIXY_RCS_MIN_POS);
             scan_inc = -scan_inc;
             if(scan_inc < 0)
             {
-                move_left_motor_speed(-250, 2);
-                move_right_motor_speed(250, 2);
+                move_left_motor_speed(-200, 2);
+                move_right_motor_speed(200, 2);
             }
             else
             {
-                move_left_motor_speed(-250, 2);
-                move_right_motor_speed(250, 2);
+                move_left_motor_speed(-200, 2);
+                move_right_motor_speed(200, 2);
             }
             delay(random(250, 500));
         }
@@ -91,44 +103,67 @@ void findObjects()
 
 // main colored object tracking function
 // signature 1-7: 1-red, 2-orange, 3-yellow, 4-green, 5-light blue, 6-blue, 7-violet
+enum States {searching = 1, tracking = 0};
+States CVB = searching;
+static int index = -1;
 void cccFunction() 
 {
-    int panError, tiltError, translateError, turnError;
-    Block tracked_block = NULL;
+    int panError, tiltError, translateError, turnError,left,right;
+    Block *tracked_block = NULL;
     
     pixy.ccc.getBlocks();
-
-    // track and follow appropriate blocks, else scan for new objects
-    if(pixy.ccc.numBlocks > 0 ) 
+    
+    if(index == -1)
     {
-        Serial.print("Blocks Detected: ");
-        for(int i=0; i < pixy.ccc.numBlocks; i++)
+        CVB = searching;
+        index = acquireBlock();
+        if(index >= 0)
         {
-            Serial.print("block "); Serial.print(i); Serial.print(": ");
-            pixy.ccc.blocks[i].print();
+            CVB = tracking;
         }
-
-        // track();
-        if(pixy.ccc.blocks[0].m_age > 25)
-        {
-            for(i=0; i<pixy.ccc.numBlocks[i].m_index)
-            {
-                if(pixy.ccc.blocks[0].index 
-            }
-        }
-        
-        // chase();
-        
-        move_left_motor_speed(100, 2);
-        move_right_motor_speed(100,2);
-        digitalWrite(LED_PIN,HIGH);
     }
-    else
-    {
-        // findObjects();
+    
+    if(index >= 0){
+        tracked_block = trackBlock(index);
+    }
+    
+    if(tracked_block){
+        //calculate the for the pan and tilt offset
+        panError = (int)pixy.frameWidth/2 - (int)tracked_block->m_x;
+        tiltError = (int)tracked_block->m_y - (int)pixy.frameHeight/2;
+
+        //update PID's "m_command"
+        pan.update(panError);
+        tilt.update(tiltError);
+
+        //set pan/tilt servos
+        pixy.setServos(pan.m_command, tilt.m_command);
         
+        panError += pan.m_command - PIXY_RCS_CENTER_POS;
+        tiltError += tilt.m_command - PIXY_RCS_CENTER_POS - PIXY_RCS_CENTER_POS/2 + PIXY_RCS_CENTER_POS/8;    
+        
+        turn.update(panError);
+        translate.update(-tiltError);
+  
+        if (translate.m_command>MAX_TRANSLATE_VELOCITY)
+        {
+            translate.m_command = MAX_TRANSLATE_VELOCITY;
+        }
+        
+        left = -turn.m_command + translate.m_command;
+        right = turn.m_command + translate.m_command;
+  
+        move_left_motor_speed(left, 5);
+        move_right_motor_speed(right, 5);
+    }
+    else 
+    {
+        findObjects();
+        turn.reset();
+        translate.reset(); 
         move_left_motor_speed(0, 2);
-        move_right_motor_speed(0,2); 
+        move_right_motor_speed(0, 2);
+        index = -1;
         digitalWrite(LED_PIN,LOW);
     }
 }
@@ -153,5 +188,3 @@ void loop()
 }
 
 
-//motors.flipLeftMotor(true);
-//motors.flipRightMotor(true);
