@@ -1,8 +1,8 @@
-// Computer Vision Robot
+// Computer Vision Robot 
 // UCR CS122A Final Project
 // Partners: Antonius Panggabean, Jiunn Siow
 // Lab Section: 021
-
+ 
 #include <PIDLoop.h>
 #include <Pixy2.h>
 #include <Pixy2CCC.h>
@@ -19,28 +19,28 @@
 #include <SPI.h>
 
 #define LED_PIN 13
-#define MAX_TRANSLATE_VELOCITY 200
+#define MAX_TRANSLATE_VELOCITY 250
 
 // global variables to interface motors and camera
 ZumoMotors motors;
 Pixy2 pixy;
 
 // parameters: proportional, integral, derivative, isServo
-PIDLoop pan(500, 300, 500, true);
+PIDLoop pan(500, 200, 500, true);
 PIDLoop tilt(500, 0, 500, true);
 PIDLoop turn(300, 200, 300, false);
-PIDLoop translate(200, 50, 300, true);
+PIDLoop translate(5, 0, 11, false);
 
 
 void move_left_motor_speed(int speed ,int time){
     //Speed goes from 400 to -400
     motors.setLeftSpeed(speed);
-    delay(time);
+    delay(time); 
 }
 void move_right_motor_speed(int speed,int time){
     //speed goes from 400 to -400
     motors.setRightSpeed(speed);
-    delay(time);
+    delay(time);  
 }
 
 // get largest block on camera frame that has existed for at least 25ms and return it to follow.
@@ -50,8 +50,8 @@ int acquireBlock(){
     {
         if(pixy.ccc.blocks[0].m_age>25)
         {
-            return pixy.ccc.blocks[0].m_index;
-        }
+            return pixy.ccc.blocks[0].m_index;       
+        }  
     }
     return -1;
 }
@@ -75,11 +75,11 @@ int scan_inc = (PIXY_RCS_MAX_POS - PIXY_RCS_MIN_POS) / 120;
 int last_move = 0;
 void findObjects()
 {
-    if(millis() - last_move > 20)
+    if(millis() - last_move > 20) 
     {
         last_move = millis();
         pan.m_command += scan_inc;
-
+        
         if((pan.m_command >= PIXY_RCS_MAX_POS) || (pan.m_command <= PIXY_RCS_MIN_POS))
         {
             tilt.m_command = random(PIXY_RCS_MIN_POS * 0.7, PIXY_RCS_MIN_POS);
@@ -106,16 +106,16 @@ void findObjects()
 enum States {searching = 1, tracking = 0};
 States CVB = searching;
 static int index = -1;
-int block_size = 9000; // running average size of block where we want it to be away from camera
-void cccFunction()
+void cccFunction() 
 {
-
-
+    int block_width = 0;
+    int block_height = 0;
+    int block_size = 8000; // running average for distance of block
     int panError, tiltError, translateError, turnError,left,right;
     Block *tracked_block = NULL;
-
+    
     pixy.ccc.getBlocks();
-
+    
     if(index == -1)
     {
         CVB = searching;
@@ -125,18 +125,12 @@ void cccFunction()
             CVB = tracking;
         }
     }
-
+    
     if(index >= 0)
     {
         tracked_block = trackBlock(index);
-        Serial.print("tracked block stats - w: " );
-        Serial.print(tracked_block->m_width);
-        Serial.print("h: " );
-        Serial.print(tracked_block->m_height);
-        Serial.print("size: " );
-        Serial.println(tracked_block->m_height * tracked_block->m_width);
     }
-
+    
     if(tracked_block){
         //calculate the for the pan and tilt offset
         panError = (int)pixy.frameWidth/2 - (int)tracked_block->m_x;
@@ -148,34 +142,45 @@ void cccFunction()
 
         //set pan/tilt servos
         pixy.setServos(pan.m_command, tilt.m_command);
-
-
-        //use pan/tilt errors for forward back
+        
+        
+        //use pan error for turning 
         panError += pan.m_command - PIXY_RCS_CENTER_POS;
-        tiltError += tilt.m_command - PIXY_RCS_CENTER_POS - PIXY_RCS_CENTER_POS/2 + PIXY_RCS_CENTER_POS/8;
+        tiltError += tilt.m_command - PIXY_RCS_CENTER_POS - PIXY_RCS_CENTER_POS/2 + PIXY_RCS_CENTER_POS/8;    
 
-        block_size = tracked_block->m_width * tracked_block->m_height;
-        translateError = 8000 - block_size ;
-
+        
+        block_size += block_width * block_height;
+        block_size -= block_size / 8;
+        translateError = (14000 - block_size) ;
+        
+        
         turn.update(panError);
         translate.update(translateError);
-
-        if (translate.m_command>MAX_TRANSLATE_VELOCITY)
+        
+        if (translate.m_command > 20)
         {
-            translate.m_command = MAX_TRANSLATE_VELOCITY;
+            translate.m_command *= 3.4;
         }
-
+        else if (translate.m_command < -30) 
+        {
+            translate.m_command *= 2;
+        }
+        else 
+        {
+            translate.m_command = 0;
+        }
+        
         left = -turn.m_command + translate.m_command;
         right = turn.m_command + translate.m_command;
-
+  
         move_left_motor_speed(left, 2);
         move_right_motor_speed(right, 2);
     }
-    else
+    else 
     {
         findObjects();
         turn.reset();
-        translate.reset();
+        translate.reset(); 
         move_left_motor_speed(0, 2);
         move_right_motor_speed(0, 2);
         index = -1;
@@ -186,7 +191,7 @@ void cccFunction()
 
 
 // ======================= main loop =======================
-void setup()
+void setup() 
 {
     Serial.begin(115200);
     Serial.println("CVBot Start..\n");
@@ -197,7 +202,9 @@ void setup()
 }
 
 
-void loop()
+void loop() 
 {
     cccFunction();
 }
+
+
