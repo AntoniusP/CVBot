@@ -106,14 +106,15 @@ void findObjects()
 enum States {searching = 1, tracking = 0};
 States CVB = searching;
 static int index = -1;
+
 void cccFunction() 
 {
     int block_width = 0;
     int block_height = 0;
-    int block_size = 8000; // running average for distance of block
+    int block_size = 14000; // running average for distance of block
     int panError, tiltError, translateError, turnError,left,right;
     Block *tracked_block = NULL;
-    
+
     pixy.ccc.getBlocks();
     
     if(index == -1)
@@ -129,6 +130,14 @@ void cccFunction()
     if(index >= 0)
     {
         tracked_block = trackBlock(index);
+        Serial.print("tracked block stats - w: " );
+        Serial.print(tracked_block->m_width);
+        block_width = tracked_block->m_width;
+        block_height = tracked_block->m_height;
+        Serial.print(" h: " );
+        Serial.print(tracked_block->m_height);
+        Serial.print(" size: " );
+        Serial.println(tracked_block->m_height * tracked_block->m_width);
     }
     
     if(tracked_block){
@@ -146,22 +155,18 @@ void cccFunction()
         
         //use pan error for turning 
         panError += pan.m_command - PIXY_RCS_CENTER_POS;
-        tiltError += tilt.m_command - PIXY_RCS_CENTER_POS - PIXY_RCS_CENTER_POS/2 + PIXY_RCS_CENTER_POS/8;    
 
-        
-        block_size += block_width * block_height;
-        block_size -= block_size / 8;
-        translateError = (14000 - block_size) ;
-        
+        block_size = block_width * block_height;
+        translateError = 14000 - block_size ;
         
         turn.update(panError);
         translate.update(translateError);
         
         if (translate.m_command > 20)
         {
-            translate.m_command *= 3.4;
+            translate.m_command *= 4;
         }
-        else if (translate.m_command < -30) 
+        else if (translate.m_command < -20) 
         {
             translate.m_command *= 2;
         }
@@ -187,7 +192,6 @@ void cccFunction()
         digitalWrite(LED_PIN,LOW);
     }
 }
-
 
 
 // ======================= main loop =======================
