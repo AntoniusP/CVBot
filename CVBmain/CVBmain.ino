@@ -14,6 +14,7 @@
 #include <TPixy2.h>
 #include <ZumoBuzzer.h>
 #include <ZumoMotors.h>
+#include <Pushbutton.h>
 
 #include <Wire.h>
 #include <SPI.h>
@@ -22,6 +23,7 @@
 #define MAX_TRANSLATE_VELOCITY 250
 
 // global variables to interface motors and camera
+Pushbutton button(ZUMO_BUTTON); // pin 12 for zumo shield
 ZumoMotors motors;
 Pixy2 pixy;
 
@@ -30,7 +32,7 @@ PIDLoop pan(500, 200, 500, true);
 PIDLoop tilt(500, 0, 500, true);
 PIDLoop turn(300, 200, 300, false);
 PIDLoop translate(5, 0, 11, false);
-
+PIDLoop linePan(5000, 0, 0, false);
 
 void move_left_motor_speed(int speed ,int time){
     //Speed goes from 400 to -400
@@ -109,8 +111,7 @@ static int index = -1;
 
 void cccFunction() 
 {
-    int block_width = 0;
-    int block_height = 0;
+    int block_width, block_height;
     int block_size = 14000; // running average for distance of block
     int panError, tiltError, translateError, turnError,left,right;
     Block *tracked_block = NULL;
@@ -194,6 +195,57 @@ void cccFunction()
 }
 
 
+
+// in API:
+// LINE_VECTOR = 0x01 (if line present)
+// INTERSECTION = 0x02 (if intersection present)
+// pixy.line.getMainFeatures() returns an OR'ed 8-bit int of whether 
+// or not there is LINE_VECTOR | INTERSECTION | BARCODE
+void lineFunction()
+{
+    int8_t result;
+    int error, left, right;
+    
+    result = pixy.line.getMainFeatures();
+
+    if(result & LINE_VECTOR)
+    {
+        error = (int)pixy.line.vectors->m_x1 - (int)pixy.frameWidth/2;
+        linePan.update(error);
+
+        left = linePan.m_command;
+        right = -linePan.m_command;
+
+        if(pixy.line.vectors->m_y0 > pixy.line.vectors->m_y1)
+        {
+            if(pixy.line.vectors->m_flags & LINE_FLAG_INTERSECTION_PRESENT)
+            {
+                left += 75;
+                right += 75;
+            }
+            else
+            {
+                left += 150;
+                right += 150;
+            }
+        }
+        else
+        {
+            left -= 75;
+            right -= 75;
+        }
+        motors.setLeftSpeed(left);
+        motors.setRightSpeed(right);
+    }
+    else
+    {
+        motors.setLeftSpeed(0);
+        motors.setLeftSpeed(0);
+    }
+}
+
+
+
 // ======================= main loop =======================
 void setup() 
 {
@@ -205,10 +257,35 @@ void setup()
     pinMode(LED_PIN,HIGH);
 }
 
-
+int program = -1; // -1(ccc), 1(linetrack)
 void loop() 
 {
-    cccFunction();
+    if(button.getSingleDebouncedRelease())
+    {
+        if(program < 0) 
+        {
+            pixy.changeProg("line");
+            pixy.setLamp(1,1);
+            pixy.setServos(500, 900); // camera straight and down
+        }
+        else
+        {
+            pixy.changeProg("color_connected_components");
+            pixy.setLamp(0,0);
+        }
+        program = program*(-1);
+    }
+    
+    if(program < 0)
+    {
+        cccFunction();
+        Serial.println("CCC MODE ");
+    }
+    else
+    {
+        lineFunction();
+        Serial.println("LINE MODE ");
+    }
 }
 
 
